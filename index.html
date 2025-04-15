@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Data Visualization</title>
+  <meta charset="UTF-8">
+  <script src="https://cdn.jsdelivr.net/npm/vega@5"></script>
+  <script src="https://cdn.jsdelivr.net/npm/vega-lite@5"></script>
+  <script src="https://cdn.jsdelivr.net/npm/vega-embed@6"></script>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  
+
+  <style>
+    body {
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        margin: 0;
+        padding: 0;
+        background-color: #f0f2f5;
+        color: #333;
+        }
+
+        .container {
+        max-width: 1200px;
+        margin: 40px auto;
+        background-color: #ffffff;
+        padding: 30px;
+        border-radius: 12px;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+        transition: box-shadow 0.3s ease;
+        overflow: hidden; /* Prevent overflow */
+        }
+
+        .container:hover {
+        box-shadow: 0 6px 25px rgba(0, 0, 0, 0.12);
+        }
+
+        h1 {
+        text-align: center;
+        color: #222;
+        margin-bottom: 40px;
+        font-size: 2.2em;
+        letter-spacing: 1px;
+        }
+
+        .chart-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 30px;
+        justify-items: center;
+        max-width: 100%; /* Ensure the grid is responsive */
+        overflow: hidden; /* Prevent grid items from overflowing */
+        }
+
+        .vis-container {
+        width: 100%;
+        background-color: #fafafa;
+        padding: 10px;
+        border-radius: 6px;
+        box-shadow: 0 1px 6px rgba(0, 0, 0, 0.1);
+        max-width: 100%; /* Prevent overflow */
+        max-height: 500px; /* Limit the height if needed */
+        overflow: hidden; /* Clip any content that overflows */
+        }
+
+        #loading {
+        text-align: center;
+        font-size: 1.1em;
+        color: #888;
+        margin: 30px 0;
+        }
+
+        @media (max-width: 768px) {
+        .container {
+            padding: 20px;
+        }
+
+        h1 {
+            font-size: 1.6em;
+            margin-bottom: 30px;
+        }
+
+        .vis-container {
+            margin-bottom: 40px;
+        }
+
+        .chart-grid {
+            grid-template-columns: 1fr; /* Stack charts on smaller screens */
+        }
+        }
+
+  </style>
+  
+</head>
+<body>
+  <div class="container">
+    <h1>Data Visualization</h1>
+    <div id="loading">Loading visualizations...</div>
+    <div class="chart-grid">
+            <div id="donut" class="vis-container"></div>
+            <div id="scatter" class="vis-container"></div>
+            <div id="stream" class="vis-container"></div>
+            <div id="histogram" class="vis-container"></div>
+            <div id="heatmap" class="vis-container"></div>
+            <div id="boxplot" class="vis-container"></div>
+        </div>
+  </div>
+
+  <script>
+    function parseDate(dateString) {
+      const parts = dateString.split('/');
+      let year = parseInt(parts[2]);
+      if (year < 100) {
+        year = year < 50 ? 2000 + year : 1900 + year;
+      }
+      return new Date(year, parts[0] - 1, parts[1]);
+    }
+
+    // GitHub raw CSV link
+    const csvUrl = "https://raw.githubusercontent.com/HitikaGahlot/DVA3/main/DVA3.csv";
+
+    d3.csv(csvUrl).then(data => {
+      const processedData = data.map(d => {
+        return {
+          OrderDate: parseDate(d.OrderDate),
+          Region: d.Region,
+          Rep: d.Rep,
+          Item: d.Item,
+          Units: +d.Units,
+          'Unit Cost': parseFloat(d['Unit Cost'].replace(/[^0-9.-]+/g, "")),
+          Total: parseFloat(d.Total.replace(/[^0-9.-]+/g, ""))
+        };
+      });
+
+      document.getElementById('loading').style.display = 'none';
+      createVisualizations(processedData);
+    }).catch(error => {
+      console.error('Error loading or parsing data:', error);
+      document.getElementById('loading').innerHTML = 'Error loading data: ' + error.message;
+    });
+
+    function createVisualizations(data) {
+      // Donut Chart
+      const donutSpec = {
+        $schema: 'https://vega.github.io/schema/vega-lite/v5.json',
+        title: 'Donut Chart - Total Sales by Rep',
+        data: { values: data },
+        transform: [
+          {
+            aggregate: [{ op: 'sum', field: 'Total', as: 'TotalSales' }],
+            groupby: ['Rep']
+          }
+        ],
+        mark: { type: 'arc', innerRadius: 80 },
+        encoding: {
+          theta: { field: 'TotalSales', type: 'quantitative' },
+          color: { field: 'Rep', type: 'nominal', legend: { title: 'Sales Rep' } },
+          tooltip: [
+            { field: 'Rep', type: 'nominal' },
+            { field: 'TotalSales', type: 'quantitative', format: ',.2f' }
+          ]
+        },
+        width: 400,
+        height: 400,
+        view: { stroke: null }
+      };
+
+      // Scatter Plot
+      const scatterSpec = {
+        $schema: 'https://vega.github.io/schema/vega-lite/v5.json',
+        title: 'Scatterplot - Units vs Unit Cost',
+        data: { values: data },
+        params: [{ name: 'brush', select: 'interval' }],
+        mark: 'circle',
+        encoding: {
+          x: { field: 'Units', type: 'quantitative' },
+          y: { field: 'Unit Cost', type: 'quantitative' },
+          color: {
+            condition: { param: 'brush', field: 'Item', type: 'nominal' },
+            value: 'lightgray'
+          },
+          size: { field: 'Total', type: 'quantitative' },
+          tooltip: [
+            { field: 'Item', type: 'nominal' },
+            { field: 'Rep', type: 'nominal' },
+            { field: 'Units', type: 'quantitative' },
+            { field: 'Unit Cost', type: 'quantitative' },
+            { field: 'Total', type: 'quantitative', format: ',.2f' }
+          ]
+        },
+        width: 600,
+        height: 400
+      };
+
+      // Streamgraph
+      const streamSpec = {
+        $schema: 'https://vega.github.io/schema/vega-lite/v5.json',
+        title: 'Streamgraph - Sales Over Time by Item ',
+        data: { values: data },
+        mark: 'area',
+        encoding: {
+          x: {
+            field: 'OrderDate',
+            type: 'temporal',
+            timeUnit: 'yearmonth',
+            axis: { format: '%b %Y' }
+          },
+          y: {
+            field: 'Total',
+            type: 'quantitative',
+            aggregate: 'sum',
+            stack: 'center'
+          },
+          color: { field: 'Item', type: 'nominal' },
+          tooltip: [
+            { field: 'Item', type: 'nominal' },
+            { field: 'OrderDate', type: 'temporal', timeUnit: 'yearmonth', format: '%b %Y' },
+            { field: 'Total', aggregate: 'sum', type: 'quantitative', format: ',.2f' }
+          ]
+        },
+        width: 700,
+        height: 400
+      };
+
+      // Histogram
+      const histogramSpec = {
+        $schema: 'https://vega.github.io/schema/vega-lite/v5.json',
+        title: 'Histogram - Distribution of Units with Mean Line',
+        data: { values: data },
+        layer: [
+            {
+            mark: 'bar',
+            encoding: {
+                x: {
+                field: 'Units',
+                type: 'quantitative',
+                bin: { maxbins: 10 },
+                title: 'Units'
+                },
+                y: {
+                aggregate: 'count',
+                type: 'quantitative',
+                title: 'Frequency'
+                },
+                tooltip: [
+                { field: 'Units', bin: true, type: 'quantitative' },
+                { aggregate: 'count', type: 'quantitative' }
+                ]
+            }
+            },
+            {
+            mark: {
+                type: 'rule',
+                color: 'red', // Color of the mean line
+                strokeWidth: 2, // Thickness of the line
+                strokeDash: [4, 4] // Dashes for the line
+            },
+            encoding: {
+                x: {
+                aggregate: 'mean',
+                field: 'Units',
+                type: 'quantitative',
+                title: 'Mean Units'
+                }
+            }
+            }
+        ],
+        width: 600,
+        height: 400
+        };
+
+      const heatmapSpec = {
+            $schema: 'https://vega.github.io/schema/vega-lite/v5.json',
+            title: 'Heatmap - Total Sales by Rep and Item',
+            data: { values: data },
+            transform: [
+                {
+                aggregate: [{ op: 'sum', field: 'Total', as: 'TotalSales' }],
+                groupby: ['Rep', 'Item']
+                }
+            ],
+            mark: 'rect',
+            encoding: {
+                x: {
+                field: 'Item',
+                type: 'nominal',
+                axis: { title: 'Item', labelAngle: -45 }
+                },
+                y: {
+                field: 'Rep',
+                type: 'nominal',
+                axis: { title: 'Rep' }
+                },
+                color: {
+                field: 'TotalSales',
+                type: 'quantitative',
+                scale: { scheme: 'blues' },
+                legend: { title: 'Total Sales' }
+                },
+                tooltip: [
+                { field: 'Rep', type: 'nominal' },
+                { field: 'Item', type: 'nominal' },
+                { field: 'TotalSales', type: 'quantitative', format: ',.2f' }
+                ]
+            },
+            width: 600,
+            height: 400
+            };
+
+      const boxplotSpec = {
+            $schema: 'https://vega.github.io/schema/vega-lite/v5.json',
+            title: 'Box Plot - Total Sales per Item',
+            data: { values: data },
+            mark: { type: 'boxplot', extent: 'min-max' },
+            encoding: {
+                x: {
+                field: 'Item',
+                type: 'nominal',
+                axis: { title: 'Item', labelAngle: -45 }
+                },
+                y: {
+                field: 'Total',
+                type: 'quantitative',
+                axis: { title: 'Total Sales' }
+                },
+                color: {
+                field: 'Item',
+                type: 'nominal',
+                legend: null
+                }
+            },
+            width: 600,
+            height: 400
+            };
+
+
+
+
+      // Render all specs
+      vegaEmbed('#donut', donutSpec);
+      vegaEmbed('#scatter', scatterSpec);
+      vegaEmbed('#stream', streamSpec);
+      vegaEmbed('#histogram', histogramSpec);
+      vegaEmbed('#heatmap', heatmapSpec);
+      vegaEmbed('#boxplot', boxplotSpec);
+    }
+  </script>
+</body>
+</html>
